@@ -1,50 +1,37 @@
 #include "PluginEditor.h"
-#include "PluginProcessor.h"
-
-namespace
-{
-    constexpr int timerHz = 30;
-    constexpr float meterDecay = 0.8f;
-}
 
 AnimeAnalyzerAudioProcessorEditor::AnimeAnalyzerAudioProcessorEditor (AnimeAnalyzerAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    setOpaque (true);
-    setSize (420, 260);
-    startTimerHz (timerHz);
+    setSize (300, 200);
+    startTimerHz (30);
 }
+
+AnimeAnalyzerAudioProcessorEditor::~AnimeAnalyzerAudioProcessorEditor() = default;
 
 void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colours::darkslategrey);
-
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (24.0f, juce::Font::bold));
-    g.drawText ("ANIME-ANALYZER", getLocalBounds().removeFromTop (40), juce::Justification::centred);
+    g.fillAll (juce::Colours::black);
 
     auto area = getLocalBounds().reduced (20);
-    area.removeFromTop (50);
+    auto barWidth = area.getWidth() / 4;
+    auto gap = barWidth;
 
-    auto meterArea = area.reduced (10);
-    auto leftBar = meterArea.removeFromLeft (meterArea.getWidth() / 2 - 5);
-    meterArea.removeFromLeft (10);
-    auto rightBar = meterArea;
+    auto leftHeight = static_cast<int> (displayedLeft * static_cast<float> (area.getHeight()));
+    auto rightHeight = static_cast<int> (displayedRight * static_cast<float> (area.getHeight()));
 
-    const auto drawMeter = [&g] (juce::Rectangle bounds, float level, juce::Colour colour)
-    {
-        g.setColour (colour.withAlpha (0.35f));
-        g.fillRoundedRectangle (bounds.toFloat(), 6.0f);
+    juce::Rectangle<int> leftBar (area.getX() + barWidth / 2, area.getBottom() - leftHeight, barWidth, leftHeight);
+    juce::Rectangle<int> rightBar (area.getX() + barWidth / 2 + barWidth + gap, area.getBottom() - rightHeight, barWidth, rightHeight);
 
-        auto fillWidth = (int) std::round (bounds.getWidth() * juce::jlimit (0.0f, 1.0f, level));
-        juce::Rectangle fill { bounds.getX(), bounds.getY(), fillWidth, bounds.getHeight() };
+    g.setColour (juce::Colours::deeppink);
+    g.fillRect (leftBar);
 
-        g.setColour (colour);
-        g.fillRoundedRectangle (fill.toFloat(), 6.0f);
-    };
+    g.setColour (juce::Colours::aqua);
+    g.fillRect (rightBar);
 
-    drawMeter (leftBar, leftLevel, juce::Colours::aqua);
-    drawMeter (rightBar, rightLevel, juce::Colours::hotpink);
+    g.setColour (juce::Colours::white);
+    g.setFont (16.0f);
+    g.drawText ("ANIME-ANALYZER", area.removeFromTop (24), juce::Justification::centred);
 }
 
 void AnimeAnalyzerAudioProcessorEditor::resized()
@@ -53,16 +40,13 @@ void AnimeAnalyzerAudioProcessorEditor::resized()
 
 void AnimeAnalyzerAudioProcessorEditor::timerCallback()
 {
-    updateFromProcessor();
-}
+    constexpr float smoothing = 0.2f;
 
-void AnimeAnalyzerAudioProcessorEditor::updateFromProcessor()
-{
-    const float newLeft  = audioProcessor.getRmsLevel (0);
-    const float newRight = audioProcessor.getRmsLevel (1);
+    const float targetLeft = audioProcessor.getRmsLevel (0);
+    const float targetRight = audioProcessor.getRmsLevel (1);
 
-    leftLevel  = juce::jlimit (0.0f, 1.0f, leftLevel  * meterDecay + (1.0f - meterDecay) * newLeft);
-    rightLevel = juce::jlimit (0.0f, 1.0f, rightLevel * meterDecay + (1.0f - meterDecay) * newRight);
+    displayedLeft += smoothing * (targetLeft - displayedLeft);
+    displayedRight += smoothing * (targetRight - displayedRight);
 
     repaint();
 }
