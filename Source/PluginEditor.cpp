@@ -22,7 +22,9 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     const auto makeFont = [] (float height, int style = juce::Font::plain)
     {
-        return juce::Font (juce::FontOptions (height).withStyleFlags (style));
+        juce::FontOptions options (height);
+        options.styleFlags = style;
+        return juce::Font (options);
     };
 
     // Neon border and header
@@ -53,7 +55,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     auto leftArea  = meterArea.removeFromLeft (columnWidth).reduced (10);
     auto rightArea = meterArea.reduced (10);
 
-    auto drawMeter = [&g] (juce::Rectangle<int> area, float rms, float peak, float peakHold, const juce::String& label)
+    auto drawMeter = [&g, &makeFont] (juce::Rectangle<int> area, float rms, float peak, float peakHold, const juce::String& label)
     {
         rms = juce::jlimit (0.0f, 1.2f, rms);
         peak = juce::jlimit (0.0f, 1.2f, peak);
