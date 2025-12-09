@@ -1,104 +1,118 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-#include <cmath>
-
-//==============================================================
+//==============================================================================
 AnimeAnalyzerAudioProcessor::AnimeAnalyzerAudioProcessor()
-    : juce::AudioProcessor (juce::BusesProperties()
-                                .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                                .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+    : AudioProcessor (BusesProperties()
+#if ! JucePlugin_IsMidiEffect
+#if ! JucePlugin_IsSynth
+                        .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+#endif
+                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+#endif
+                      )
 {
 }
 
-//==============================================================
-void AnimeAnalyzerAudioProcessor::prepareToPlay (double, int)
+AnimeAnalyzerAudioProcessor::~AnimeAnalyzerAudioProcessor() = default;
+
+//==============================================================================
+void AnimeAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    for (auto& level : rmsLevels)
-        level.store (0.0f);
+    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    rmsLeft.store  (0.0f);
+    rmsRight.store (0.0f);
 }
 
-void AnimeAnalyzerAudioProcessor::releaseResources() {}
-
-bool AnimeAnalyzerAudioProcessor::isBusesLayoutSupported (const juce::AudioProcessor::BusesLayout& layouts) const
+void AnimeAnalyzerAudioProcessor::releaseResources()
 {
+}
+
+#ifndef JucePlugin_PreferredChannelConfigurations
+bool AnimeAnalyzerAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+   #if JucePlugin_IsMidiEffect
+    juce::ignoreUnused (layouts);
+    return true;
+   #else
     auto mainOut = layouts.getMainOutputChannelSet();
-    return mainOut == juce::AudioChannelSet::stereo()
-        || mainOut == juce::AudioChannelSet::mono();
+    if (mainOut != juce::AudioChannelSet::stereo())
+        return false;
+
+   #if ! JucePlugin_IsSynth
+    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+        return false;
+   #endif
+
+    return true;
+   #endif
 }
+#endif
 
 void AnimeAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
-                                               juce::MidiBuffer& midiMessages)
+                                                juce::MidiBuffer& midiMessages)
 {
     juce::ignoreUnused (midiMessages);
-    juce::ScopedNoDenormals noDenormals;
 
-    const int numInputChannels  = getTotalNumInputChannels();
-    const int numOutputChannels = getTotalNumOutputChannels();
-    const int numSamples        = buffer.getNumSamples();
+    const auto numChannels = buffer.getNumChannels();
+    const auto numSamples  = buffer.getNumSamples();
 
-    for (int ch = numInputChannels; ch < numOutputChannels; ++ch)
+    // Pass-through: clear any extra output channels
+    for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
 
-    for (int ch = 0; ch < numInputChannels; ++ch)
+    if (numSamples > 0)
     {
-        float* channelData = buffer.getWritePointer (ch);
-
-        double sumSquares = 0.0;
-        for (int i = 0; i < numSamples; ++i)
+        for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
         {
-            const float sample = channelData[i];
-            sumSquares += (double) sample * (double) sample;
-        }
+            const auto* data = buffer.getReadPointer (ch);
+            double sumSquares = 0.0;
 
-        const float rms = numSamples > 0 ? std::sqrt ((float) (sumSquares / numSamples)) : 0.0f;
-        updateLevelSmoother (ch, rms);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const auto s = static_cast<double> (data[i]);
+                sumSquares += s * s;
+            }
+
+            const auto rms = static_cast<float> (std::sqrt (sumSquares / numSamples));
+
+            if (ch == 0)
+                rmsLeft.store (rms);
+            else if (ch == 1)
+                rmsRight.store (rms);
+        }
     }
 }
 
-//==============================================================
-void AnimeAnalyzerAudioProcessor::updateLevelSmoother (int channel, float newLevel)
-{
-    if (channel < 0 || channel >= (int) rmsLevels.size())
-        return;
-
-    const float current = rmsLevels[(size_t) channel].load();
-    const float smoothed = current + smoothingCoefficient * (newLevel - current);
-    rmsLevels[(size_t) channel].store (smoothed);
-}
-
-float AnimeAnalyzerAudioProcessor::getRmsLevel (int channel) const
-{
-    if (channel < 0 || channel >= (int) rmsLevels.size())
-        return 0.0f;
-
-    return rmsLevels[(size_t) channel].load();
-}
-
-//==============================================================
-juce::AudioProcessorEditor* AnimeAnalyzerAudioProcessor::createEditor()
-{
-    return new AnimeAnalyzerAudioProcessorEditor (*this);
-}
-
-const juce::String AnimeAnalyzerAudioProcessor::getName() const      { return "ANIME-ANALYZER"; }
-bool AnimeAnalyzerAudioProcessor::acceptsMidi() const                { return false; }
-bool AnimeAnalyzerAudioProcessor::producesMidi() const               { return false; }
-bool AnimeAnalyzerAudioProcessor::isMidiEffect() const               { return false; }
-double AnimeAnalyzerAudioProcessor::getTailLengthSeconds() const     { return 0.0; }
-
-int AnimeAnalyzerAudioProcessor::getNumPrograms()                    { return 1; }
-int AnimeAnalyzerAudioProcessor::getCurrentProgram()                 { return 0; }
-void AnimeAnalyzerAudioProcessor::setCurrentProgram (int)            {}
-const juce::String AnimeAnalyzerAudioProcessor::getProgramName (int) { return "Default"; }
-void AnimeAnalyzerAudioProcessor::changeProgramName (int, const juce::String&) {}
-
+//==============================================================================
 void AnimeAnalyzerAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    juce::ignoreUnused (destData);
+    // No params yet
+    destData.setSize (0);
 }
 
 void AnimeAnalyzerAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     juce::ignoreUnused (data, sizeInBytes);
+}
+
+float AnimeAnalyzerAudioProcessor::getRmsLevel (int channel) const
+{
+    if (channel == 0)
+        return rmsLeft.load();
+    if (channel == 1)
+        return rmsRight.load();
+    return 0.0f;
+}
+
+//==============================================================================
+juce::AudioProcessorEditor* AnimeAnalyzerAudioProcessor::createEditor()
+{
+    return new AnimeAnalyzerAudioProcessorEditor (*this);
+}
+
+// JUCE plugin factory
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new AnimeAnalyzerAudioProcessor();
 }
