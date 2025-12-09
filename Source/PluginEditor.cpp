@@ -22,9 +22,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     const auto makeFont = [] (float height, int style = juce::Font::plain)
     {
-        juce::FontOptions options (height);
-        options.styleFlags = style;
-        return juce::Font (options);
+        return juce::Font (height, style);
     };
 
     // Neon border and header
