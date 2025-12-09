@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 //==============================================================================
 AnimeAnalyzerAudioProcessor::AnimeAnalyzerAudioProcessor()
@@ -22,6 +23,9 @@ void AnimeAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     juce::ignoreUnused (sampleRate, samplesPerBlock);
     rmsLeft.store  (0.0f);
     rmsRight.store (0.0f);
+    peakLeft.store (0.0f);
+    peakRight.store (0.0f);
+    correlation.store (0.0f);
 }
 
 void AnimeAnalyzerAudioProcessor::releaseResources()
@@ -63,23 +67,61 @@ void AnimeAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
     if (numSamples > 0)
     {
-        for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
+        double sumSquaresLeft  = 0.0;
+        double sumSquaresRight = 0.0;
+        double sumCross        = 0.0;
+
+        float peakL = 0.0f;
+        float peakR = 0.0f;
+
+        const bool hasLeft  = numChannels > 0;
+        const bool hasRight = numChannels > 1;
+
+        if (hasLeft)
         {
-            const auto* data = buffer.getReadPointer (ch);
-            double sumSquares = 0.0;
+            const auto* data = buffer.getReadPointer (0);
 
             for (int i = 0; i < numSamples; ++i)
             {
                 const auto s = static_cast<double> (data[i]);
-                sumSquares += s * s;
+                sumSquaresLeft += s * s;
+                peakL = juce::jmax (peakL, static_cast<float> (std::abs (data[i])));
             }
 
-            const auto rms = static_cast<float> (std::sqrt (sumSquares / numSamples));
+            rmsLeft.store (static_cast<float> (std::sqrt (sumSquaresLeft / numSamples)));
+            peakLeft.store (peakL);
+        }
 
-            if (ch == 0)
-                rmsLeft.store (rms);
-            else if (ch == 1)
-                rmsRight.store (rms);
+        if (hasRight)
+        {
+            const auto* data = buffer.getReadPointer (1);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const auto s = static_cast<double> (data[i]);
+                sumSquaresRight += s * s;
+                peakR = juce::jmax (peakR, static_cast<float> (std::abs (data[i])));
+            }
+
+            rmsRight.store (static_cast<float> (std::sqrt (sumSquaresRight / numSamples)));
+            peakRight.store (peakR);
+        }
+
+        if (hasLeft && hasRight)
+        {
+            const auto* left  = buffer.getReadPointer (0);
+            const auto* right = buffer.getReadPointer (1);
+
+            for (int i = 0; i < numSamples; ++i)
+                sumCross += static_cast<double> (left[i]) * static_cast<double> (right[i]);
+
+            const auto denom = std::sqrt (sumSquaresLeft * sumSquaresRight);
+            const auto corr = (denom > 0.0) ? juce::jlimit (-1.0, 1.0, sumCross / denom) : 0.0;
+            correlation.store (static_cast<float> (corr));
+        }
+        else
+        {
+            correlation.store (0.0f);
         }
     }
 }
@@ -102,6 +144,15 @@ float AnimeAnalyzerAudioProcessor::getRmsLevel (int channel) const
         return rmsLeft.load();
     if (channel == 1)
         return rmsRight.load();
+    return 0.0f;
+}
+
+float AnimeAnalyzerAudioProcessor::getPeakLevel (int channel) const
+{
+    if (channel == 0)
+        return peakLeft.load();
+    if (channel == 1)
+        return peakRight.load();
     return 0.0f;
 }
 
