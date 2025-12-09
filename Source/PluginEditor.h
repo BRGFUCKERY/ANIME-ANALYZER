@@ -3,12 +3,12 @@
 #include "JuceHeader.h"
 #include "PluginProcessor.h"
 
-class AnimeAnalyzerAudioProcessorEditor  : public juce::AudioProcessorEditor,
+    class AnimeAnalyzerAudioProcessorEditor  : public juce::AudioProcessorEditor,
                                            private juce::Timer
 {
 public:
     explicit AnimeAnalyzerAudioProcessorEditor (AnimeAnalyzerAudioProcessor&);
-    ~AnimeAnalyzerAudioProcessorEditor() override = default;
+    ~AnimeAnalyzerAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;

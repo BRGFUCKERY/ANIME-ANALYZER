@@ -20,6 +20,11 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     auto bounds = getLocalBounds();
 
+    const auto makeFont = [] (float height, int style = juce::Font::plain)
+    {
+        return juce::Font (juce::FontOptions (height).withStyleFlags (style));
+    };
+
     // Neon border and header
     juce::ColourGradient backdrop (juce::Colour::fromRGB (10, 12, 20), 0.0f, 0.0f,
                                    juce::Colour::fromRGB (20, 22, 40), 0.0f, (float) bounds.getHeight(),
@@ -32,10 +37,10 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     auto header = bounds.removeFromTop (60).reduced (20, 10);
     g.setColour (juce::Colours::whitesmoke);
-    g.setFont (juce::Font (26.0f, juce::Font::bold));
+    g.setFont (makeFont (26.0f, juce::Font::bold));
     g.drawText ("Anime Analyzer | DigiCheck-inspired meters", header, juce::Justification::centredLeft, false);
 
-    g.setFont (juce::Font (13.0f));
+    g.setFont (makeFont (13.0f));
     g.setColour (juce::Colours::lightgrey);
     g.drawText ("Stereo RMS, peak, and phase correlation", bounds.removeFromTop (24).reduced (20, 0),
                 juce::Justification::centredLeft, false);
@@ -86,10 +91,10 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
         g.drawLine ((float) bar.getX(), (float) peakCurrentY, (float) bar.getRight(), (float) peakCurrentY, 1.0f);
 
         g.setColour (juce::Colours::whitesmoke);
-        g.setFont (juce::Font (16.0f, juce::Font::bold));
+        g.setFont (makeFont (16.0f, juce::Font::bold));
         g.drawText (label, area.removeFromTop (24), juce::Justification::centred, false);
 
-        g.setFont (juce::Font (13.0f));
+        g.setFont (makeFont (13.0f));
         g.setColour (juce::Colours::lightgrey);
         g.drawText (juce::String::formatted ("RMS: %.2f", rms), area.removeFromBottom (26), juce::Justification::centred, false);
         g.drawText (juce::String::formatted ("Peak: %.2f", peak), area.removeFromBottom (22), juce::Justification::centred, false);
@@ -107,7 +112,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     auto corrLabel = corrBox.removeFromTop (24);
     g.setColour (juce::Colours::whitesmoke);
-    g.setFont (juce::Font (16.0f, juce::Font::bold));
+    g.setFont (makeFont (16.0f, juce::Font::bold));
     g.drawText ("PHASE CORRELATION", corrLabel, juce::Justification::centred, false);
 
     auto corrMeter = corrBox.reduced (20, 18);
@@ -144,7 +149,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawLine ((float) markerX, (float) corrMeter.getY(), (float) markerX, (float) corrMeter.getBottom(), 2.0f);
 
     g.setColour (juce::Colours::lightgrey);
-    g.setFont (juce::Font (12.0f));
+    g.setFont (makeFont (12.0f));
     g.drawText ("-1", corrMeter.removeFromLeft (40), juce::Justification::centredLeft, false);
     g.drawText ("0", juce::Rectangle<int> (centreX - 10, markerY - markerHeight / 2, 20, markerHeight),
                 juce::Justification::centred, false);
