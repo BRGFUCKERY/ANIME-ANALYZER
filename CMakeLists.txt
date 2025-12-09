@@ -12,7 +12,8 @@ include(FetchContent)
 FetchContent_Declare(
     juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 7.0.9
+    # Use the develop branch for macOS 15 ScreenCaptureKit compatibility
+    GIT_TAG develop
 )
 
 FetchContent_MakeAvailable(juce)
