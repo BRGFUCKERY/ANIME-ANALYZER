@@ -1,65 +1,53 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
-#include <array>
 
 class AnimeAnalyzerAudioProcessor : public juce::AudioProcessor
 {
 public:
     AnimeAnalyzerAudioProcessor();
-    ~AnimeAnalyzerAudioProcessor() override = default;
+    ~AnimeAnalyzerAudioProcessor() override;
 
-    //==============================================================
-    // Core AudioProcessor overrides
-    //==============================================================
+    //==============================================================================
+    const juce::String getName() const override { return "ANIME-ANALYZER"; }
+
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
-    bool isBusesLayoutSupported (const juce::AudioProcessor::BusesLayout& layouts) const override;
+   #ifndef JucePlugin_PreferredChannelConfigurations
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+   #endif
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
-    //==============================================================
-    // Editor
-    //==============================================================
+    //==============================================================================
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    //==============================================================
-    // Metadata
-    //==============================================================
-    const juce::String getName() const override;
-    bool acceptsMidi() const override;
-    bool producesMidi() const override;
-    bool isMidiEffect() const override;
-    double getTailLengthSeconds() const override;
+    //==============================================================================
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
 
-    //==============================================================
-    // Programs
-    //==============================================================
-    int getNumPrograms() override;
-    int getCurrentProgram() override;
-    void setCurrentProgram (int index) override;
-    const juce::String getProgramName (int index) override;
-    void changeProgramName (int index, const juce::String& newName) override;
+    //==============================================================================
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
 
-    //==============================================================
-    // State
-    //==============================================================
+    //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    //==============================================================
-    // Meter helpers
-    //==============================================================
+    // Simple RMS getter for UI (0.0 - 1.0 approx)
     float getRmsLevel (int channel) const;
 
 private:
-    void updateLevelSmoother (int channel, float newLevel);
-
-    std::array<std::atomic<float>, 2> rmsLevels { 0.0f, 0.0f };
-    float smoothingCoefficient = 0.2f;
+    std::atomic<float> rmsLeft  { 0.0f };
+    std::atomic<float> rmsRight { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimeAnalyzerAudioProcessor)
 };
