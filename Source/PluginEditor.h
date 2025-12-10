@@ -1,6 +1,6 @@
 #pragma once
 
-#include <juce_gui_basics/juce_gui_basics.h>
+#include "JuceHeader.h"
 #include <array>
 #include "PluginProcessor.h"
 
@@ -23,15 +23,15 @@ private:
     AnimeAnalyzerAudioProcessor& audioProcessor;
 
     static constexpr int numSpectrumBands  = AnimeAnalyzerAudioProcessor::getNumSpectrumBands();
-    static constexpr int numSpectrumCells  = 24;
+    static constexpr int numSpectrumCells  = 24; // vertical grid cells for RME-style look
 
     std::array<float, numSpectrumBands> displayBandLevels {};
-    float meterDecay = 0.7f;
+    float meterDecay = 0.75f;
 
     juce::Array<juce::Image> gifFrames;
     int currentGifFrameIndex = 0;
     double gifTimeAccumulatorSeconds = 0.0;
-    double gifFrameDurationSeconds = 1.0 / 24.0;
+    double gifFrameDurationSeconds   = 1.0 / 24.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimeAnalyzerAudioProcessorEditor)
 };
