@@ -24,7 +24,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     auto bounds = getLocalBounds();
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (24.0f, juce::Font::bold));
+    g.setFont (juce::Font (juce::FontOptions (24.0f).withStyleFlags (juce::Font::bold)));
     g.drawText ("ANIME-ANALYZER", bounds.removeFromTop (40), juce::Justification::centred, false);
 
     auto spectrumArea = getLocalBounds().reduced (20).withTrimmedTop (40);
@@ -135,7 +135,9 @@ void AnimeAnalyzerAudioProcessorEditor::loadDemonGif()
 
     juce::MemoryInputStream stream (data, size, false);
     juce::GIFImageFormat gif;
-    gif.decodeImage (gifFrames, stream);
+
+    if (auto image = gif.decodeImage (stream); image.isValid())
+        gifFrames.add (image);
 
     if (gifFrames.isEmpty())
     {
