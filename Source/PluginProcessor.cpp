@@ -234,7 +234,7 @@ void AnimeAnalyzerAudioProcessor::performFFTAnalysis()
 
 void AnimeAnalyzerAudioProcessor::updateSpectrumBands (const float* magnitudes, int numMagnitudes)
 {
-    if (currentSampleRate <= 0.0)
+    if (currentSampleRate <= 0.0 || magnitudes == nullptr || numMagnitudes <= 0)
         return;
 
     const double minFreq = 20.0;
@@ -242,35 +242,45 @@ void AnimeAnalyzerAudioProcessor::updateSpectrumBands (const float* magnitudes, 
     const double logMin  = std::log10 (minFreq);
     const double logMax  = std::log10 (maxFreq);
 
+    const double nyquist     = currentSampleRate * 0.5;
+    const double binFreqStep = nyquist / static_cast<double> (numMagnitudes);
+
     for (int band = 0; band < numSpectrumBands; ++band)
     {
-        const double bandStart = logMin + (logMax - logMin) * (static_cast<double> (band) / numSpectrumBands);
-        const double bandEnd   = logMin + (logMax - logMin) * (static_cast<double> (band + 1) / numSpectrumBands);
+        const double bandStart = logMin + (logMax - logMin)
+                               * (static_cast<double> (band) / numSpectrumBands);
+        const double bandEnd   = logMin + (logMax - logMin)
+                               * (static_cast<double> (band + 1) / numSpectrumBands);
 
         const double freqLow  = std::pow (10.0, bandStart);
         const double freqHigh = std::pow (10.0, bandEnd);
 
+        // Map frequency range to FFT bin indices.
+        int binStart = (int) std::floor (freqLow  / binFreqStep);
+        int binEnd   = (int) std::ceil  (freqHigh / binFreqStep);
+
+        // Clamp into valid range and make sure we always have at least one bin.
+        binStart = juce::jlimit (1, numMagnitudes - 1, binStart);
+        binEnd   = juce::jlimit (binStart, numMagnitudes - 1, binEnd);
+
         double magnitudeSum = 0.0;
         int binCount = 0;
 
-        for (int bin = 1; bin < numMagnitudes; ++bin)
+        for (int bin = binStart; bin <= binEnd; ++bin)
         {
-            const double binFreq = (static_cast<double> (bin) * currentSampleRate * 0.5) / static_cast<double> (numMagnitudes);
-
-            if (binFreq >= freqLow && binFreq < freqHigh)
-            {
-                magnitudeSum += static_cast<double> (magnitudes[bin]);
-                ++binCount;
-            }
+            magnitudeSum += static_cast<double> (magnitudes[bin]);
+            ++binCount;
         }
 
-        const double magnitude = (binCount > 0) ? magnitudeSum / static_cast<double> (binCount) : 0.0;
-        const float dbValue = juce::Decibels::gainToDecibels (static_cast<float> (magnitude), -100.0f);
-        const float normalized = juce::jlimit (0.0f, 1.0f, juce::jmap (dbValue, -80.0f, 0.0f, 0.0f, 1.0f));
+        const double magnitude = (binCount > 0)
+                                   ? magnitudeSum / static_cast<double> (binCount)
+                                   : 0.0;
 
-        const float previous = spectrumBandLevels[(size_t) band].load();
-        const float smoothed = 0.8f * previous + 0.2f * normalized;
-        spectrumBandLevels[(size_t) band].store (smoothed);
+        const float dbValue = juce::Decibels::gainToDecibels (static_cast<float> (magnitude), -100.0f);
+        const float normalized = juce::jlimit (0.0f, 1.0f,
+                                               juce::jmap (dbValue, -80.0f, 0.0f, 0.0f, 1.0f));
+
+        spectrumBandLevels[(size_t) band].store (normalized);
     }
 }
 

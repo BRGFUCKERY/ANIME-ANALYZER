@@ -23,12 +23,14 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     auto bounds = getLocalBounds();
 
+    // Title
     g.setColour (juce::Colours::white);
     g.setFont (juce::Font (24.0f, juce::Font::bold));
     auto titleArea = bounds.removeFromTop (40);
     g.drawText ("ANIME-ANALYZER", titleArea,
                 juce::Justification::centred, false);
 
+    // Spectrum area
     auto spectrumArea = bounds.reduced (40, 20);
 
     const float spectrumWidth  = (float) spectrumArea.getWidth();
@@ -36,6 +38,10 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     const float columnWidth  = spectrumWidth  / (float) numSpectrumBands;
     const float cellHeight   = spectrumHeight / (float) numSpectrumCells;
+
+    // -------------------------------------------------------------------------
+    // GRID LINES
+    // -------------------------------------------------------------------------
 
     // Vertical grid lines (one per band)
     g.setColour (juce::Colours::white.withAlpha (0.25f));
@@ -54,53 +60,113 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
                     (float) spectrumArea.getRight(), y, 1.0f);
     }
 
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (14.0f, juce::Font::bold));
+    // -------------------------------------------------------------------------
+    // dB SCALE LABELS ON THE LEFT
+    // -------------------------------------------------------------------------
 
-    auto drawFreqLabel = [&] (float freq, const juce::String& text)
+    {
+        constexpr float minDb = -80.0f;
+        constexpr float maxDb =   0.0f;
+
+        static const float tickValues[] = { 0.0f, -10.0f, -20.0f, -30.0f, -40.0f, -50.0f, -60.0f };
+
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (12.0f, juce::Font::plain));
+
+        for (float tickDb : tickValues)
+        {
+            const float norm = juce::jmap (tickDb, minDb, maxDb, 0.0f, 1.0f);
+            const float y = spectrumArea.getBottom() - norm * spectrumHeight;
+
+            juce::Rectangle<int> textBounds ((int) spectrumArea.getX() - 40,
+                                             (int) (y - 8.0f),
+                                             35,
+                                             16);
+            g.drawFittedText (juce::String ((int) tickDb), textBounds,
+                              juce::Justification::centredRight, 1);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // FREQUENCY LABELS UNDER EACH BAR (CENTER FREQUENCY PER BAND)
+    // -------------------------------------------------------------------------
+
     {
         const double minFreq = 20.0;
         const double maxFreq = 20000.0;
         const double logMin  = std::log10 (minFreq);
         const double logMax  = std::log10 (maxFreq);
 
-        const double logF = std::log10 ((double) freq);
-        const double t = (logF - logMin) / (logMax - logMin);
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (10.0f, juce::Font::plain));
 
-        const float x = (float) spectrumArea.getX() + (float) t * spectrumWidth;
-        juce::Rectangle<float> labelBounds (x - 20.0f, (float) spectrumArea.getBottom() + 4.0f, 40.0f, 18.0f);
-        g.drawFittedText (text, labelBounds.toNearestInt(), juce::Justification::centred, 1);
-    };
+        for (int band = 0; band < numSpectrumBands; ++band)
+        {
+            const double bandStart = logMin + (logMax - logMin) * (static_cast<double> (band) / numSpectrumBands);
+            const double bandEnd   = logMin + (logMax - logMin) * (static_cast<double> (band + 1) / numSpectrumBands);
+            const double centreLog  = 0.5 * (bandStart + bandEnd);
+            const double centreFreq = std::pow (10.0, centreLog);
 
-    drawFreqLabel (20.0f,   "20");
-    drawFreqLabel (100.0f,  "100");
-    drawFreqLabel (1000.0f, "1k");
-    drawFreqLabel (10000.0f,"10k");
-    drawFreqLabel (20000.0f,"20k");
+            juce::String labelText;
+            if (centreFreq >= 1000.0)
+                labelText = juce::String (juce::roundToInt ((float) (centreFreq / 1000.0f))) + "k";
+            else
+                labelText = juce::String (juce::roundToInt ((float) centreFreq));
 
+            const float xCentre = spectrumArea.getX() + (band + 0.5f) * columnWidth;
+
+            juce::Rectangle<int> labelBounds ((int) (xCentre - columnWidth * 0.5f),
+                                              spectrumArea.getBottom() + 4,
+                                              (int) columnWidth,
+                                              16);
+            g.drawFittedText (labelText, labelBounds,
+                              juce::Justification::centred, 1);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SQUARE-CELL DEMON GRID
+    // -------------------------------------------------------------------------
+
+    // Current frame (can be static or animated)
     juce::Image frame;
     if (! gifFrames.isEmpty())
         frame = gifFrames[currentGifFrameIndex];
 
+    const float cellImageSize = juce::jmin (columnWidth, cellHeight) * 0.9f; // keep a bit of margin
+
+    // One column of stacked square cells per band
     for (int band = 0; band < numSpectrumBands; ++band)
     {
         const float level = juce::jlimit (0.0f, 1.0f, displayBandLevels[(size_t) band]);
-        const float barHeight = level * spectrumHeight;
+        const int activeCells = juce::jlimit (0, numSpectrumCells,
+                                              (int) std::ceil (level * (float) numSpectrumCells));
 
         const float x = spectrumArea.getX() + band * columnWidth;
-        const float y = spectrumArea.getBottom() - barHeight;
 
-        juce::Rectangle<float> columnBounds (x, (float) spectrumArea.getY(), columnWidth, spectrumHeight);
-        juce::Rectangle<float> barBounds (x, y, columnWidth, barHeight);
-
+        // Background for the whole column
+        juce::Rectangle<float> columnBounds (x, (float) spectrumArea.getY(),
+                                             columnWidth, spectrumHeight);
         g.setColour (juce::Colours::black.withAlpha (0.85f));
         g.fillRect (columnBounds);
 
-        if (barHeight > 0.0f && frame.isValid())
+        if (frame.isValid() && activeCells > 0)
         {
-            g.drawImage (frame,
-                         barBounds,
-                         juce::RectanglePlacement::stretchToFit);
+            for (int cell = 0; cell < activeCells; ++cell)
+            {
+                const float cellTop      = spectrumArea.getBottom() - (cell + 1) * cellHeight;
+                const float cellCentreY  = cellTop + cellHeight * 0.5f;
+
+                const float imageX = x + (columnWidth - cellImageSize) * 0.5f;
+                const float imageY = cellCentreY - cellImageSize * 0.5f;
+
+                juce::Rectangle<float> imageBounds (imageX, imageY, cellImageSize, cellImageSize);
+
+                // Keep the original aspect ratio of the image, only reduce in size, never stretch.
+                g.drawImage (frame,
+                             imageBounds,
+                             juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize);
+            }
         }
     }
 }
