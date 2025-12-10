@@ -24,7 +24,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     auto bounds = getLocalBounds();
 
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (24.0f, juce::Font::bold));
+    g.setFont (juce::Font (juce::FontOptions (24.0f).withWeight (juce::FontOptions::Weight::bold)));
     auto titleArea = bounds.removeFromTop (40);
     g.drawText ("ANIME-ANALYZER", titleArea,
                 juce::Justification::centred, false);
@@ -55,7 +55,7 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (14.0f, juce::Font::bold));
+    g.setFont (juce::Font (juce::FontOptions (14.0f).withWeight (juce::FontOptions::Weight::bold)));
 
     auto drawFreqLabel = [&] (float freq, const juce::String& text)
     {
@@ -164,7 +164,7 @@ void AnimeAnalyzerAudioProcessorEditor::loadDemonGif()
     juce::MemoryInputStream stream (data, size, false);
     juce::GIFImageFormat gifFormat;
 
-    gifFormat.decodeImage (gifFrames, stream);
+    gifFormat.loadAllImagesInto (stream, gifFrames);
 
     if (gifFrames.isEmpty())
     {
