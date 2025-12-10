@@ -19,3 +19,9 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANIME_ANALYZER_VST3_macOS
+          path: build/**/*.vst3
