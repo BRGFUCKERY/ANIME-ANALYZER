@@ -1,11 +1,15 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
+#include <cmath>
+#include <vector>
 
 //==============================================================================
 AnimeAnalyzerAudioProcessorEditor::AnimeAnalyzerAudioProcessorEditor (AnimeAnalyzerAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setSize (820, 420);
-    startTimerHz (30); // ~30 FPS for smooth meters
+    loadDemonGif();
+    startTimerHz (30);
 }
 
 AnimeAnalyzerAudioProcessorEditor::~AnimeAnalyzerAudioProcessorEditor()
@@ -19,143 +23,72 @@ void AnimeAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colours::black);
 
     auto bounds = getLocalBounds();
+    g.setColour (juce::Colours::white);
+    g.setFont (juce::Font (24.0f, juce::Font::bold));
+    g.drawText ("ANIME-ANALYZER", bounds.removeFromTop (40), juce::Justification::centred, false);
 
-    const auto makeFont = [] (float height, int style = juce::Font::plain)
+    auto spectrumArea = getLocalBounds().reduced (20).withTrimmedTop (40);
+    const float cellWidth  = spectrumArea.getWidth()  / (float) numSpectrumBands;
+    const float cellHeight = spectrumArea.getHeight() / (float) numSpectrumCells;
+
+    // Grid lines
+    g.setColour (juce::Colours::white);
+    for (int b = 0; b <= numSpectrumBands; ++b)
     {
-        return juce::Font (height, style);
+        const float x = spectrumArea.getX() + b * cellWidth;
+        g.drawLine (x, (float) spectrumArea.getY(), x, (float) spectrumArea.getBottom());
+    }
+
+    g.drawLine ((float) spectrumArea.getX(), (float) spectrumArea.getY(),
+                (float) spectrumArea.getRight(), (float) spectrumArea.getY());
+    g.drawLine ((float) spectrumArea.getX(), (float) spectrumArea.getBottom(),
+                (float) spectrumArea.getRight(), (float) spectrumArea.getBottom());
+
+    // Frequency labels (approx log spacing)
+    const std::vector<std::pair<juce::String, float>> freqLabels {
+        { "20",   20.0f },
+        { "100",  100.0f },
+        { "1k",   1000.0f },
+        { "10k",  10000.0f },
+        { "20k",  20000.0f }
     };
 
-    // Neon border and header
-    juce::ColourGradient backdrop (juce::Colour::fromRGB (10, 12, 20), 0.0f, 0.0f,
-                                   juce::Colour::fromRGB (20, 22, 40), 0.0f, (float) bounds.getHeight(),
-                                   false);
-    g.setGradientFill (backdrop);
-    g.fillRect (bounds);
-
-    g.setColour (juce::Colours::darkslategrey.withAlpha (0.8f));
-    g.drawRect (bounds.reduced (4), 2.0f);
-
-    auto header = bounds.removeFromTop (60).reduced (20, 10);
-    g.setColour (juce::Colours::whitesmoke);
-    g.setFont (makeFont (26.0f, juce::Font::bold));
-    g.drawText ("Anime Analyzer | DigiCheck-inspired meters", header, juce::Justification::centredLeft, false);
-
-    g.setFont (makeFont (13.0f));
-    g.setColour (juce::Colours::lightgrey);
-    g.drawText ("Stereo RMS, peak, and phase correlation", bounds.removeFromTop (24).reduced (20, 0),
-                juce::Justification::centredLeft, false);
-
-    auto content = bounds.reduced (18);
-    auto meterArea = content.removeFromLeft ((int) (content.getWidth() * 0.65f)).reduced (10);
-    auto correlationArea = content.reduced (10);
-
-    const auto columnWidth = meterArea.getWidth() / 2;
-    auto leftArea  = meterArea.removeFromLeft (columnWidth).reduced (10);
-    auto rightArea = meterArea.reduced (10);
-
-    auto drawMeter = [&g, &makeFont] (juce::Rectangle<int> area, float rms, float peak, float peakHold, const juce::String& label)
+    const float minFreq = 20.0f;
+    const float maxFreq = 20000.0f;
+    for (const auto& label : freqLabels)
     {
-        rms = juce::jlimit (0.0f, 1.2f, rms);
-        peak = juce::jlimit (0.0f, 1.2f, peak);
-        peakHold = juce::jlimit (0.0f, 1.2f, peakHold);
+        const float position = juce::jmap (std::log10 (label.second / minFreq),
+                                           0.0f, std::log10 (maxFreq / minFreq),
+                                           (float) spectrumArea.getX(), (float) spectrumArea.getRight());
+        g.drawText (label.first, (int) position - 12, spectrumArea.getBottom() + 4, 40, 20,
+                    juce::Justification::centredLeft, false);
+    }
 
-        g.setColour (juce::Colours::black.withAlpha (0.35f));
-        g.fillRoundedRectangle (area.toFloat(), 6.0f);
-        g.setColour (juce::Colours::darkgrey);
-        g.drawRoundedRectangle (area.toFloat(), 6.0f, 1.5f);
+    auto frame = gifFrames.isEmpty() ? juce::Image() : gifFrames[currentGifFrameIndex];
 
-        auto bar = area.reduced (12);
+    for (int b = 0; b < numSpectrumBands; ++b)
+    {
+        const float level = displayBandLevels[(size_t) b];
+        const int litCells = (int) std::round (level * (float) numSpectrumCells);
 
-        // Gradient meter fill
-        const int filledHeight = static_cast<int> (bar.getHeight() * rms);
-        juce::Rectangle<int> filled (
-            bar.getX(),
-            bar.getBottom() - filledHeight,
-            bar.getWidth(),
-            filledHeight);
+        for (int c = 0; c < numSpectrumCells; ++c)
+        {
+            const float x = spectrumArea.getX() + b * cellWidth;
+            const float y = spectrumArea.getBottom() - (c + 1) * cellHeight;
+            juce::Rectangle<float> cellBounds { x, y, cellWidth, cellHeight };
 
-        juce::ColourGradient gradient (juce::Colours::darkgreen, (float) filled.getX(), (float) filled.getBottom(),
-                                       juce::Colours::red, (float) filled.getX(), (float) filled.getY(), false);
-        gradient.addColour (0.5, juce::Colours::yellow);
-        g.setGradientFill (gradient);
-        g.fillRect (filled);
-
-        // Peak hold line
-        const int peakY = bar.getBottom() - static_cast<int> (bar.getHeight() * peakHold);
-        g.setColour (juce::Colours::aqua);
-        g.drawLine ((float) bar.getX(), (float) peakY, (float) bar.getRight(), (float) peakY, 2.0f);
-
-        // Current peak marker
-        const int peakCurrentY = bar.getBottom() - static_cast<int> (bar.getHeight() * peak);
-        g.setColour (juce::Colours::lightblue.withAlpha (0.7f));
-        g.drawLine ((float) bar.getX(), (float) peakCurrentY, (float) bar.getRight(), (float) peakCurrentY, 1.0f);
-
-        g.setColour (juce::Colours::whitesmoke);
-        g.setFont (makeFont (16.0f, juce::Font::bold));
-        g.drawText (label, area.removeFromTop (24), juce::Justification::centred, false);
-
-        g.setFont (makeFont (13.0f));
-        g.setColour (juce::Colours::lightgrey);
-        g.drawText (juce::String::formatted ("RMS: %.2f", rms), area.removeFromBottom (26), juce::Justification::centred, false);
-        g.drawText (juce::String::formatted ("Peak: %.2f", peak), area.removeFromBottom (22), juce::Justification::centred, false);
-    };
-
-    drawMeter (leftArea,  leftRms,  leftPeak,  peakHoldLeft,  "LEFT");
-    drawMeter (rightArea, rightRms, rightPeak, peakHoldRight, "RIGHT");
-
-    // Correlation meter inspired by DigiCheck's Stereo Correlation Meter
-    auto corrBox = correlationArea.reduced (10);
-    g.setColour (juce::Colours::black.withAlpha (0.4f));
-    g.fillRoundedRectangle (corrBox.toFloat(), 8.0f);
-    g.setColour (juce::Colours::darkgrey);
-    g.drawRoundedRectangle (corrBox.toFloat(), 8.0f, 1.5f);
-
-    auto corrLabel = corrBox.removeFromTop (24);
-    g.setColour (juce::Colours::whitesmoke);
-    g.setFont (makeFont (16.0f, juce::Font::bold));
-    g.drawText ("PHASE CORRELATION", corrLabel, juce::Justification::centred, false);
-
-    auto corrMeter = corrBox.reduced (20, 18);
-    g.setColour (juce::Colours::darkgrey);
-    g.fillRect (corrMeter);
-
-    const float corrClamped = juce::jlimit (-1.0f, 1.0f, correlation);
-    const int centreX = corrMeter.getX() + corrMeter.getWidth() / 2;
-    const int zeroY = corrMeter.getCentreY();
-    const int markerY = zeroY;
-    const int markerHeight = corrMeter.getHeight();
-
-    // draw grid
-    g.setColour (juce::Colours::darkslategrey);
-    g.drawVerticalLine (centreX, (float) corrMeter.getY(), (float) corrMeter.getBottom());
-    g.drawVerticalLine (corrMeter.getX(), (float) corrMeter.getY(), (float) corrMeter.getBottom());
-    g.drawVerticalLine (corrMeter.getRight(), (float) corrMeter.getY(), (float) corrMeter.getBottom());
-
-    // filled bar showing correlation
-    const int corrFill = static_cast<int> ((corrMeter.getWidth() / 2) * corrClamped);
-    juce::Rectangle<int> corrFillRect = corrFill >= 0
-        ? juce::Rectangle<int> (centreX, corrMeter.getY(), corrFill, corrMeter.getHeight())
-        : juce::Rectangle<int> (centreX + corrFill, corrMeter.getY(), -corrFill, corrMeter.getHeight());
-
-    juce::ColourGradient corrGrad (juce::Colours::red, (float) corrMeter.getX(), (float) corrMeter.getCentreY(),
-                                   juce::Colours::green, (float) corrMeter.getRight(), (float) corrMeter.getCentreY(), false);
-    corrGrad.addColour (0.5, juce::Colours::yellow);
-    g.setGradientFill (corrGrad);
-    g.fillRect (corrFillRect);
-
-    // marker line at current correlation
-    g.setColour (juce::Colours::aqua);
-    const int markerX = centreX + corrFill;
-    g.drawLine ((float) markerX, (float) corrMeter.getY(), (float) markerX, (float) corrMeter.getBottom(), 2.0f);
-
-    g.setColour (juce::Colours::lightgrey);
-    g.setFont (makeFont (12.0f));
-    g.drawText ("-1", corrMeter.removeFromLeft (40), juce::Justification::centredLeft, false);
-    g.drawText ("0", juce::Rectangle<int> (centreX - 10, markerY - markerHeight / 2, 20, markerHeight),
-                juce::Justification::centred, false);
-    g.drawText ("+1", corrMeter.removeFromRight (40), juce::Justification::centredRight, false);
-    g.drawText (juce::String::formatted ("Current: %.2f", corrClamped), corrBox.removeFromBottom (24),
-                juce::Justification::centred, false);
+            if (c < litCells)
+            {
+                g.drawImage (frame, cellBounds, juce::RectanglePlacement::stretchToFit);
+            }
+            else
+            {
+                g.setColour (juce::Colours::black.withAlpha (0.8f));
+                g.fillRect (cellBounds);
+                g.setColour (juce::Colours::white);
+            }
+        }
+    }
 }
 
 void AnimeAnalyzerAudioProcessorEditor::resized()
@@ -166,35 +99,48 @@ void AnimeAnalyzerAudioProcessorEditor::resized()
 void AnimeAnalyzerAudioProcessorEditor::timerCallback()
 {
     updateFromProcessor();
+    advanceGifAnimation (1.0 / 30.0);
+    repaint();
 }
 
 void AnimeAnalyzerAudioProcessorEditor::updateFromProcessor()
 {
-    const float newLeftRms   = audioProcessor.getRmsLevel (0);
-    const float newRightRms  = audioProcessor.getRmsLevel (1);
-    const float newLeftPeak  = audioProcessor.getPeakLevel (0);
-    const float newRightPeak = audioProcessor.getPeakLevel (1);
-    const float newCorrelation = audioProcessor.getCorrelation();
-
-    auto smooth = [] (float current, float target, float attack, float release)
+    for (int i = 0; i < numSpectrumBands; ++i)
     {
-        if (target > current)
-            return attack * target + (1.0f - attack) * current;
-        return release * target + (1.0f - release) * current;
-    };
+        const float target = audioProcessor.getSpectrumBandLevel (i);
+        displayBandLevels[(size_t) i] =
+            juce::jlimit (0.0f, 1.0f,
+                displayBandLevels[(size_t) i] * meterDecay +
+                (1.0f - meterDecay) * target);
+    }
+}
 
-    leftRms  = juce::jlimit (0.0f, 1.2f, smooth (leftRms,  newLeftRms,  meterAttack, meterRelease));
-    rightRms = juce::jlimit (0.0f, 1.2f, smooth (rightRms, newRightRms, meterAttack, meterRelease));
+void AnimeAnalyzerAudioProcessorEditor::advanceGifAnimation (double deltaSeconds)
+{
+    if (gifFrames.isEmpty())
+        return;
 
-    leftPeak  = juce::jlimit (0.0f, 1.2f, smooth (leftPeak,  newLeftPeak,  meterAttack, meterRelease));
-    rightPeak = juce::jlimit (0.0f, 1.2f, smooth (rightPeak, newRightPeak, meterAttack, meterRelease));
+    gifTimeAccumulatorSeconds += deltaSeconds;
+    if (gifTimeAccumulatorSeconds >= gifFrameDurationSeconds)
+    {
+        gifTimeAccumulatorSeconds -= gifFrameDurationSeconds;
+        currentGifFrameIndex = (currentGifFrameIndex + 1) % gifFrames.size();
+    }
+}
 
-    peakHoldLeft  = juce::jmax (newLeftPeak,  peakHoldLeft * peakHoldDecay);
-    peakHoldRight = juce::jmax (newRightPeak, peakHoldRight * peakHoldDecay);
+void AnimeAnalyzerAudioProcessorEditor::loadDemonGif()
+{
+    auto* data = BinaryData::demon_girl_gif;
+    auto  size = BinaryData::demon_girl_gifSize;
 
-    correlation = juce::jlimit (-1.0f, 1.0f,
-                                correlation * (1.0f - correlationSmoothing)
-                                + newCorrelation * correlationSmoothing);
+    juce::MemoryInputStream stream (data, size, false);
+    juce::GIFImageFormat gif;
+    gif.decodeImage (gifFrames, stream);
 
-    repaint();
+    if (gifFrames.isEmpty())
+    {
+        juce::Image fallback (juce::Image::RGB, 10, 10, true);
+        fallback.clear (fallback.getBounds(), juce::Colours::red);
+        gifFrames.add (fallback);
+    }
 }

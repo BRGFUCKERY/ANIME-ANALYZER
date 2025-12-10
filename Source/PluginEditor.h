@@ -1,9 +1,10 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
 #include "PluginProcessor.h"
 
-    class AnimeAnalyzerAudioProcessorEditor  : public juce::AudioProcessorEditor,
+class AnimeAnalyzerAudioProcessorEditor  : public juce::AudioProcessorEditor,
                                            private juce::Timer
 {
 public:
@@ -16,21 +17,21 @@ public:
 private:
     void timerCallback() override;
     void updateFromProcessor();
+    void advanceGifAnimation (double deltaSeconds);
+    void loadDemonGif();
 
     AnimeAnalyzerAudioProcessor& audioProcessor;
 
-    float leftRms   = 0.0f;
-    float rightRms  = 0.0f;
-    float leftPeak  = 0.0f;
-    float rightPeak = 0.0f;
-    float peakHoldLeft  = 0.0f;
-    float peakHoldRight = 0.0f;
-    float correlation   = 0.0f;
+    static constexpr int numSpectrumBands  = AnimeAnalyzerAudioProcessor::getNumSpectrumBands();
+    static constexpr int numSpectrumCells  = 24;
 
-    const float meterAttack  = 0.35f;
-    const float meterRelease = 0.08f;
-    const float peakHoldDecay = 0.92f;
-    const float correlationSmoothing = 0.25f;
+    std::array<float, numSpectrumBands> displayBandLevels {};
+    float meterDecay = 0.7f;
+
+    juce::Array<juce::Image> gifFrames;
+    int currentGifFrameIndex = 0;
+    double gifTimeAccumulatorSeconds = 0.0;
+    double gifFrameDurationSeconds = 1.0 / 24.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimeAnalyzerAudioProcessorEditor)
 };
