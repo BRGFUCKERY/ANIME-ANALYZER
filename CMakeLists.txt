@@ -47,8 +47,14 @@ target_compile_definitions(ANIME_ANALYZER
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
+juce_add_binary_data(PluginBinaryData
+    SOURCES
+        Resources/demon_girl.gif
+)
+
 target_link_libraries(ANIME_ANALYZER
     PRIVATE
+        PluginBinaryData
         juce::juce_audio_utils
         juce::juce_audio_processors
         juce::juce_audio_basics
